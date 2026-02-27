@@ -1,0 +1,146 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-db
+  labels:
+    app: encontros-tech
+    component: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: encontros-tech
+      component: database
+  template:
+    metadata:
+      labels:
+        app: encontros-tech
+        component: database
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_USER
+          value: "encontros_tech"
+        - name: POSTGRES_PASSWORD
+          value: "encontros_tech"
+        - name: POSTGRES_DB
+          value: "encontros_tech"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+      volumes:
+      - name: postgres-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-db
+  labels:
+    app: encontros-tech
+    component: database
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+  selector:
+    app: encontros-tech
+    component: database
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: encontros-tech-app
+  labels:
+    app: encontros-tech
+    component: application
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: encontros-tech
+      component: application
+  template:
+    metadata:
+      labels:
+        app: encontros-tech
+        component: application
+    spec:
+      containers:
+      - name: app
+        image: fabricioveronez/encontros-tech-labs:v1
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://encontros_tech:encontros_tech@postgres-db:5432/encontros_tech"
+        - name: APP_TITLE
+          value: "Encontros Tech"
+        - name: DEBUG
+          value: "false"
+        - name: HOST
+          value: "0.0.0.0"
+        - name: PORT
+          value: "8000"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: LOG_FORMAT
+          value: "simple"
+        - name: SERVICE_NAME
+          value: "encontros-tech"
+        - name: SERVICE_VERSION
+          value: "1.0.0"
+        - name: PROMETHEUS_MULTIPROC_DIR
+          value: "/tmp/prometheus_multiproc"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: encontros-tech-app
+  labels:
+    app: encontros-tech
+    component: application
+spec:
+  type: NodePort
+  ports:
+  - port: 8000
+    targetPort: 8000
+    nodePort: 30800
+    protocol: TCP
+    name: http
+  selector:
+    app: encontros-tech
+    component: application
